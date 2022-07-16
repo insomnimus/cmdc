@@ -13,7 +13,7 @@ section ".idata" import data readable writeable ;{
 	import shlwapi, PathGetArgsW, "PathGetArgsW"
 ;}
 
-section ".bss" data readable writeable ;{
+section ".data" data readable writeable ;{
 	PINFO PROCESS_INFORMATION
 	SINFO STARTUPINFO \
 		sizeof.STARTUPINFO,\ ; cb
@@ -58,7 +58,6 @@ section ".text" code readable executable ;{
 	;}
 
 	start: ;{
-		; sub esp, 8 ; align the stack on 16-byte boundary
 		stdcall strlen, COMMAND
 		mov ebx, eax
 		invoke PathGetArgsW, <invoke GetCommandLineW>
@@ -126,7 +125,6 @@ section ".text" code readable executable ;{
 		invoke ExitProcess, -1
 
 	.return:
-		; add esp, 8
 		ret
 	;}
 ;}

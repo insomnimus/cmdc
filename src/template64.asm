@@ -13,7 +13,7 @@ section ".idata" import data readable writeable ;{
 	import shlwapi, PathGetArgsW, "PathGetArgsW"
 ;}
 
-section ".bss" data readable writeable ;{
+section ".data" data readable writeable ;{
 	PINFO PROCESS_INFORMATION
 	SINFO STARTUPINFO \
 		sizeof.STARTUPINFO,\ ; cb
