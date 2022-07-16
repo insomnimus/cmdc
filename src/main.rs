@@ -1,3 +1,6 @@
+#[cfg(not(windows))]
+compile_error!("this program can only be built on windows platforms");
+
 use std::{
 	ffi::OsStr,
 	fs,
