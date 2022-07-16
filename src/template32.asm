@@ -86,7 +86,7 @@ section ".text" code readable executable ;{
 			COMMAND,\ ; command string
 			NULL,\ ; process attr
 			NULL,\ ; thread attr
-			FALSE,\ ; inherit handles = false
+			TRUE,\ ; inherit handles = false
 			0,\ ; creation flags
 			NULL,\ ; env block
 			NULL,\ ; starting directory
