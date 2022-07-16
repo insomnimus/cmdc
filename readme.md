@@ -12,7 +12,7 @@ There is actually one use case that I know of, though: `cargo` style subcommand 
 So instead of writing a small program that basically calls a shell script with an interpreter, you can use `cmdc` to do it for you.
 
 ## Building
-Since the templates are written in assembly and make use of macros provided by [flat-assembler](https://flatassembler.net), you should assemble it before running cargo.
+Since the templates are written in assembly and make use of macros provided by [flat-assembler](https://flatassembler.net), you must install flat-assembler and assemble the templates before running cargo.
 
 1. Install flat-assembler from [here](https://flatassembler.net) or optionally from [scoop](https://github.com/ScoopInstaller/scoop).
 2. Make sure the `$INCLUDE` environment variable contains the flat-assemblers include directory (it ships with a directory called `include`). For example on powershell: `$env:INCLUDE += ";D:\programs\flat-assembler\include"`.
