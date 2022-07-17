@@ -2,7 +2,10 @@
 compile_error!("this program can only be built on windows platforms");
 
 use std::{
-	ffi::OsStr,
+	ffi::{
+		OsStr,
+		OsString,
+	},
 	fs,
 	os::windows::ffi::OsStrExt,
 };
@@ -10,6 +13,7 @@ use std::{
 use clap::{
 	arg,
 	crate_version,
+	value_parser,
 	Command,
 };
 
@@ -140,19 +144,25 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 		.about("Compile a command into an executable")
 		.version(crate_version!())
 		.args(&[
-			arg!(-o --out <file_name> "The output file name").allow_invalid_utf8(true),
+			arg!(-o --out <file_name> "The output file name")
+				.allow_invalid_utf8(true)
+				.value_parser(value_parser!(OsString)),
 			arg!(-a --arch [arch] "The target architecture")
 				.possible_values(["x32", "x64"])
 				.case_insensitive(true)
 				.default_value(CURRENT_ARCH),
-			arg!(<command> "The command to run, without any arguments").allow_invalid_utf8(true),
-			arg!([args] ... "The arguments to embed into the program").allow_invalid_utf8(true),
+			arg!(<command> "The command to run, without any arguments")
+				.allow_invalid_utf8(true)
+				.value_parser(value_parser!(OsString)),
+			arg!([args] ... "The arguments to embed into the program")
+				.allow_invalid_utf8(true)
+				.value_parser(value_parser!(OsString)),
 		])
 		.get_matches();
 
 	let cmd = make_command_line(
-		m.value_of_os("command").unwrap(),
-		m.values_of_os("args").into_iter().flatten(),
+		m.get_one::<OsString>("command").unwrap(),
+		m.get_many::<OsString>("args").into_iter().flatten(),
 	);
 
 	let mut cmd = cmd
@@ -166,7 +176,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 	// Pad rest of it with zeroes.
 	cmd.extend((0..CMD_SIZE - cmd.len()).map(|_| 0));
 
-	let template = match m.value_of("arch").unwrap() {
+	let template = match m.get_one::<String>("arch").unwrap().as_str() {
 		"x64" | "X64" => TEMPLATE64,
 		"x32" | "X32" => TEMPLATE32,
 		_ => unreachable!(),
