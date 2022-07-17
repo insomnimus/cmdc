@@ -7,41 +7,77 @@ use std::{
 	os::windows::ffi::OsStrExt,
 };
 
-use clap::arg;
+use clap::{
+	arg,
+	crate_version,
+	Command,
+};
 
 const CURRENT_ARCH: &str = if cfg!(target_arch = "x86_64") {
 	"x64"
 } else {
 	"x32"
 };
-static TEMPLATE32: &[u8] = include_bytes!("template32.exe");
-static TEMPLATE64: &[u8] = include_bytes!("template64.exe");
+
+static TEMPLATE32: Template = Template::new(include_bytes!("template32.exe"));
+static TEMPLATE64: Template = Template::new(include_bytes!("template64.exe"));
+// "replaceme" in utf-16 as bytes
 const REPLACEME: &[u8] = &[
 	0, 114, 0, 101, 0, 112, 0, 108, 0, 97, 0, 99, 0, 101, 0, 109, 0, 101,
 ];
+const MAX_CMD: usize = 32765 * 2;
 const CMD_SIZE: usize = 32767 * 2 + REPLACEME.len();
 
-fn replace(template: &[u8], with: &[u8]) -> Vec<u8> {
-	debug_assert_eq!(CMD_SIZE, with.len());
-	debug_assert!(
-		template == TEMPLATE32 || template == TEMPLATE64,
-		"template provided to `replace` is neither TEMPLATE32 nor TEMPLATE64"
-	);
-	let mut buf = Vec::with_capacity(template.len());
-
-	for i in 0..template.len() - CMD_SIZE {
-		if REPLACEME == &template[i..i + REPLACEME.len()] {
-			buf.extend(&template[..i]);
-			buf.extend(with);
-			buf.extend(&template[i + CMD_SIZE..]);
-			debug_assert_eq!(buf.len(), template.len());
-			return buf;
-		}
-	}
-	panic!("could not find the utf-16 text `replaceme` in the template executable");
+#[derive(Copy, Clone)]
+struct Template {
+	data: &'static [u8],
+	replacement_index: usize,
 }
 
-fn make_command_line<I>(argv0: &OsStr, args: I) -> Result<Vec<u16>, &'static str>
+impl Template {
+	const fn new(data: &'static [u8]) -> Self {
+		const fn slice_eq(data: &[u8], index: usize, right: &[u8]) -> bool {
+			let mut i = 0;
+			while i < right.len() {
+				if data[i + index] != right[i] {
+					return false;
+				}
+				i += 1;
+			}
+			true
+		}
+
+		assert!(data.len() >= REPLACEME.len());
+
+		let mut i = 0;
+		while i <= data.len() - REPLACEME.len() {
+			if slice_eq(data, i, REPLACEME) {
+				return Self {
+					data,
+					replacement_index: i,
+				};
+			}
+			i += 1;
+		}
+
+		panic!("string not found in template");
+	}
+
+	fn generate(self, replacement: &[u8]) -> Vec<u8> {
+		assert_eq!(
+			replacement.len(),
+			CMD_SIZE,
+			"replacement must be padded to CMD_SIZE bytes"
+		);
+		let mut buf = self.data.to_vec();
+		buf[self.replacement_index..self.replacement_index + replacement.len()]
+			.copy_from_slice(replacement);
+
+		buf
+	}
+}
+
+fn make_command_line<I>(argv0: &OsStr, args: I) -> Vec<u16>
 where
 	I: IntoIterator,
 	I::Item: AsRef<OsStr>,
@@ -54,35 +90,25 @@ where
 	// the child process parses its arguments.
 	// Note that quotes aren't escaped here because they can't be used in arg0.
 	// But that's ok because file paths can't contain quotes.
-	cmd.push(b'"' as u16);
+	cmd.push('"' as u16);
 	cmd.extend(argv0.encode_wide());
-	cmd.push(b'"' as u16);
+	cmd.push('"' as u16);
 
 	for arg in args {
 		cmd.push(' ' as u16);
-		append_arg(&mut cmd, arg.as_ref())?;
+		append_arg(&mut cmd, arg.as_ref());
 	}
-	Ok(cmd)
+	cmd
 }
 
-fn ensure_no_nulls(s: &OsStr) -> Result<(), &'static str> {
-	if s.encode_wide().any(|b| b == 0) {
-		Err("input contains null bytes")
-	} else {
-		Ok(())
-	}
-}
-
-fn append_arg(cmd: &mut Vec<u16>, arg: &OsStr) -> Result<(), &'static str> {
+fn append_arg(cmd: &mut Vec<u16>, arg: &OsStr) {
 	// If an argument has 0 characters then we need to quote it to ensure
 	// that it actually gets passed through on the command line or otherwise
 	// it will be dropped entirely when parsed on the other end.
-	ensure_no_nulls(arg)?;
-	let arg_bytes = arg
-		.encode_wide()
-		.flat_map(|w| w.to_ne_bytes())
-		.collect::<Vec<_>>();
-	let quote = arg_bytes.iter().any(|c| *c == b' ' || *c == b'\t') || arg_bytes.is_empty();
+	let quote = arg.is_empty()
+		|| arg
+			.encode_wide()
+			.any(|c| c == ' ' as u16 || c == '\t' as u16);
 
 	if quote {
 		cmd.push('"' as u16);
@@ -107,12 +133,12 @@ fn append_arg(cmd: &mut Vec<u16>, arg: &OsStr) -> Result<(), &'static str> {
 		cmd.extend((0..backslashes).map(|_| '\\' as u16));
 		cmd.push('"' as u16);
 	}
-	Ok(())
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-	let m = clap::Command::new("cmdc")
-		.about("Compile a command into a standalone executable")
+	let m = Command::new("cmdc")
+		.about("Compile a command into an executable")
+		.version(crate_version!())
 		.args(&[
 			arg!(-o --out <file_name> "The output file name").allow_invalid_utf8(true),
 			arg!(-a --arch [arch] "The target architecture")
@@ -127,14 +153,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 	let cmd = make_command_line(
 		m.value_of_os("command").unwrap(),
 		m.values_of_os("args").into_iter().flatten(),
-	)?;
+	);
 
 	let mut cmd = cmd
 		.into_iter()
 		.flat_map(|w| w.to_be_bytes())
 		.collect::<Vec<_>>();
 
-	if cmd.len() >= 32765 * 2 {
+	if cmd.len() >= MAX_CMD {
 		return Err("the command is too long for windows to handle".into());
 	}
 	// Pad rest of it with zeroes.
@@ -146,7 +172,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 		_ => unreachable!(),
 	};
 
-	let data = replace(template, &cmd);
+	let data = template.generate(&cmd);
 	fs::write(m.value_of_os("out").unwrap(), &data)?;
 	Ok(())
 }
