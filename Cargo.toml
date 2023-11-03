@@ -1,7 +1,12 @@
 [package]
 name = "cmdc"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+
+[profile.release]
+lto = "thin"
+opt-level = 2
+panic = "abort"
 
 [dependencies]
 clap = { version = "3.2.12", features = ["cargo"] }

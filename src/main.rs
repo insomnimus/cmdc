@@ -7,6 +7,10 @@ use std::{
 		OsString,
 	},
 	fs,
+	io::{
+		self,
+		Write,
+	},
 	os::windows::ffi::OsStrExt,
 };
 
@@ -144,7 +148,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 		.about("Compile a command into an executable")
 		.version(crate_version!())
 		.args(&[
-			arg!(-o --out <file_name> "The output file name")
+			arg!(-o --out <file_name> "The output file name (use - for stdout)")
 				.allow_invalid_utf8(true)
 				.value_parser(value_parser!(OsString)),
 			arg!(-a --arch [arch] "The target architecture")
@@ -183,7 +187,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 	};
 
 	let data = template.generate(&cmd);
-	fs::write(m.value_of_os("out").unwrap(), &data)?;
+	let p = m.value_of_os("out").unwrap();
+	if p == "-" {
+		let mut stdout = io::stdout().lock();
+		stdout.write_all(&data)?;
+	} else {
+		fs::write(m.value_of_os("out").unwrap(), &data)?;
+	}
+
 	Ok(())
 }
 
