@@ -1,0 +1,51 @@
+{
+  "name": "release",
+  "on": {
+    "push": {
+      "tags": [
+        "v*.*.*"
+      ]
+    }
+  },
+  "jobs": {
+    "release": {
+      "name": "create github release",
+      "runs-on": "windows-latest",
+      "steps": [
+        {
+          "name": "Setup | Checkout",
+          "uses": "actions/checkout@v3"
+        },
+        {
+          "name": "install flat-assembler",
+          "uses": "stevenwdv/setup-fasm@v1",
+          "with": {
+            "edition": "fasm1"
+          }
+        },
+        {
+          "name": "rustup",
+          "run": "rustup default nightly; rustup component add rust-src; rustup target add i686-pc-windows-msvc"
+        },
+        {
+          "name": "Build",
+          "env": {
+            "RUSTFLAGS": "-Cstrip=debuginfo"
+          },
+          "run": "./build.ps1 -noAutoInclude -cargoFlags '--release', '-Z', 'build-std=std,alloc,core,panic_abort'"
+        },
+        {
+          "name": "prepare artifacts",
+          "run": "$ErrorActionPreference = 'stop'; cd target/x86_64-pc-windows-msvc/release; 7z a ../../../out/cmdc-win64.7z cmdc.exe; cd ../../i686-pc-windows-msvc/release; 7z a ../../../out/cmdc-win32.7z cmdc.exe; cd ../../.."
+        },
+        {
+          "name": "create github release",
+          "env": {
+            "GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}"
+          },
+          "run": "gh release create ${{ github.ref_name }} (get-childitem out) --generate-notes --title ${{ github.ref_name }} "
+        }
+      ]
+    }
+  }
+}
