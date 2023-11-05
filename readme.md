@@ -12,7 +12,7 @@ There is actually one use case that I know of, though: `cargo` style subcommand 
 So instead of writing a small program that basically calls a shell script with an interpreter, you can use `cmdc` to do it for you.
 
 ## Install
-Grab a pre-built binary from the [releases page](releases) ([here's the latest release](releases/latest)).
+Grab a pre-built binary from the [releases page](https://github.com/insomnimus/cmdc/releases) ([here's the latest release](https://github.com/insomnimus/cmdc/releases/latest)).
 
 Or build from source:
 
