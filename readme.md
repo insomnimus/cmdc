@@ -11,8 +11,14 @@ No particular reason, take it or leave it :^).
 There is actually one use case that I know of, though: `cargo` style subcommand plugins sometimes need `.exe` extensions.
 So instead of writing a small program that basically calls a shell script with an interpreter, you can use `cmdc` to do it for you.
 
+## Install
+Grab a pre-built binary from the [releases page](releases) ([here's the latest release](releases/latest)).
+
+Or build from source:
+
 ## Building
 Since the templates are written in assembly and make use of macros provided by [flat-assembler](https://flatassembler.net), you must have the `fasm.exe` installed on your system.
+You will also need a recent enough version of rust (tested with 1.73.0).
 
 1. Install flat-assembler from [here](https://flatassembler.net) or optionally from [scoop](https://github.com/ScoopInstaller/scoop).
 2. If flat-assembler's `INCLUDE` directory is not in your `$INCLUDE` env variable, put it there. Or optionally set the `FASM_INCLUDE` env variable to the directory.
