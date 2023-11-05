@@ -2,6 +2,7 @@
 compile_error!("this program can only be built on windows platforms");
 
 use std::{
+	borrow::Cow,
 	ffi::{
 		OsStr,
 		OsString,
@@ -12,6 +13,7 @@ use std::{
 		Write,
 	},
 	os::windows::ffi::OsStrExt,
+	path::PathBuf,
 };
 
 use clap::{
@@ -21,18 +23,26 @@ use clap::{
 	Command,
 };
 
-const CURRENT_ARCH: &str = if cfg!(target_arch = "x86_64") {
+macro_rules! template {
+	[$name:literal] => {
+		Template::new(include_bytes!(
+			concat!(env!("OUT_DIR"), "/", $name, ".exe")
+		))
+	};
+}
+
+static CURRENT_ARCH: &str = if cfg!(target_arch = "x86_64") {
 	"x64"
 } else {
 	"x32"
 };
 
-static TEMPLATE32: Template = Template::new(include_bytes!("template32.exe"));
-static TEMPLATE64: Template = Template::new(include_bytes!("template64.exe"));
-// "replaceme" in utf-16 as bytes
-const REPLACEME: &[u8] = &[
-	0, 114, 0, 101, 0, 112, 0, 108, 0, 97, 0, 99, 0, 101, 0, 109, 0, 101,
-];
+static ANCHOR: &[u8] = b"---CMDC COMMAND STRING---";
+const REPLACEME: &[u8] = b"r\0e\0p\0l\0a\0c\0e\0m\0e\0";
+
+static TEMPLATE32: Template = template!("template32");
+static TEMPLATE64: Template = template!("template64");
+
 const MAX_CMD: usize = 32765 * 2;
 const CMD_SIZE: usize = 32767 * 2 + REPLACEME.len();
 
@@ -94,7 +104,7 @@ where
 	// that the spawned process may recover them using CommandLineToArgvW.
 	let mut cmd: Vec<u16> = Vec::new();
 
-	// Always quote the program name so CreateProcess to avoid ambiguity when
+	// Always quote the program name to avoid ambiguity when
 	// the child process parses its arguments.
 	// Note that quotes aren't escaped here because they can't be used in arg0.
 	// But that's ok because file paths can't contain quotes.
@@ -143,26 +153,81 @@ fn append_arg(cmd: &mut Vec<u16>, arg: &OsStr) {
 	}
 }
 
+fn read_command(data: &[u8]) -> Option<Cow<'_, str>> {
+	if data.len() <= ANCHOR.len() + MAX_CMD {
+		return None;
+	}
+
+	let anchor = data.windows(ANCHOR.len()).position(|w| w == ANCHOR)?;
+	// Anchor found, command string is placed right after it in the executable
+	let start = anchor + ANCHOR.len();
+	if start >= data.len() {
+		return None;
+	}
+
+	// The command terminates with a null word (\0\0), find it
+	// let end = (start..data.len() - 1)
+	// .step_by(2)
+	// .find(|&i| data[i] == 0 && data[i + 1] == 0)?;
+	let end = start + data[start..].chunks(2).position(|w| w == [0, 0])? * 2;
+
+	if start == end {
+		None
+	} else {
+		// It's UTF16-LE encoded but rust strings are UTF8, we have to convert
+		assert!(
+			(end - start) % 2 == 0,
+			"internal error: expected the byte slice to have even number of items"
+		);
+		Some(
+			encoding_rs::UTF_16LE
+				.decode_without_bom_handling(&data[start..end])
+				.0,
+		)
+	}
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
 	let m = Command::new("cmdc")
 		.about("Compile a command into an executable")
 		.version(crate_version!())
 		.args(&[
-			arg!(-o --out <file_name> "The output file name (use - for stdout)")
+			arg!(-i --inspect [executable] "Print the command in an executable compiled with this tool").exclusive(true)
+			.value_parser(value_parser!(PathBuf)),
+			arg!(-o --out [file_name] "The output file name (use - for stdout)")
 				.allow_invalid_utf8(true)
+				.required_unless_present("inspect")
 				.value_parser(value_parser!(OsString)),
 			arg!(-a --arch [arch] "The target architecture")
 				.possible_values(["x32", "x64"])
 				.case_insensitive(true)
 				.default_value(CURRENT_ARCH),
-			arg!(<command> "The command to run, without any arguments")
+			arg!([command] "The command to run, without any arguments")
 				.allow_invalid_utf8(true)
-				.value_parser(value_parser!(OsString)),
+				.value_parser(value_parser!(OsString))
+				.required_unless_present("inspect"),
 			arg!([args] ... "The arguments to embed into the program")
 				.allow_invalid_utf8(true)
 				.value_parser(value_parser!(OsString)),
 		])
 		.get_matches();
+
+	if let Some(p) = m.get_one::<PathBuf>("inspect") {
+		const SINCE: &str = "0.3.0";
+		let data = fs::read(p)?;
+		match read_command(&data) {
+			Some(s) => println!("{s}"),
+			None => {
+				return Err(format!(
+					"{}: not an executable produced by cmdc version >= {}",
+					p.display(),
+					SINCE
+				)
+				.into())
+			}
+		}
+		return Ok(());
+	}
 
 	let cmd = make_command_line(
 		m.get_one::<OsString>("command").unwrap(),
@@ -171,7 +236,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 	let mut cmd = cmd
 		.into_iter()
-		.flat_map(|w| w.to_be_bytes())
+		.flat_map(|w| w.to_le_bytes())
 		.collect::<Vec<_>>();
 
 	if cmd.len() >= MAX_CMD {

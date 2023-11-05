@@ -39,6 +39,8 @@ section ".data" data readable writeable ;{
 	ERROR_TEMPLATE du "error executing the command `%s`:", 10, "%s", 0
 	LAST_ERROR dd ?
 	EXIT_CODE dd 0
+
+	ANCHOR db "---CMDC COMMAND STRING---"
 	COMMAND du "replaceme", MAX_CMD dup (0)
 ;}
 

@@ -1,6 +1,6 @@
 [package]
 name = "cmdc"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 [profile.release]
@@ -10,3 +10,4 @@ panic = "abort"
 
 [dependencies]
 clap = { version = "3.2.12", features = ["cargo"] }
+encoding_rs = "0.8.33"

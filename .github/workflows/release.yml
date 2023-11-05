@@ -28,11 +28,12 @@
           "run": "rustup default nightly; rustup component add rust-src; rustup target add i686-pc-windows-msvc"
         },
         {
-          "name": "Build",
-          "env": {
-            "RUSTFLAGS": "-Cstrip=debuginfo"
-          },
-          "run": "./build.ps1 -noAutoInclude -cargoFlags '--release', '-Z', 'build-std=std,alloc,core,panic_abort'"
+          "name": "Build x86",
+          "run": "cargo rustc --release -Z 'build-std=std,alloc,core,panic_abort' --target i686-pc-windows-msvc -- -Cstrip=debuginfo"
+        },
+        {
+          "name": "build x86_64",
+          "run": "cargo rustc --release -Z 'build-std=std,alloc,core,panic_abort' --target x86_64-pc-windows-msvc -- -Cstrip=debuginfo"
         },
         {
           "name": "prepare artifacts",
