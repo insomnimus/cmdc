@@ -194,6 +194,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 		.args(&[
 			arg!(-i --inspect [executable] "Print the command in an executable compiled with this tool").exclusive(true)
 			.value_parser(value_parser!(PathBuf)),
+			arg!(-s --shell "Use cmd.exe /c while invoking the command"),
 			arg!(-o --out [file_name] "The output file name (use - for stdout)")
 				.allow_invalid_utf8(true)
 				.required_unless_present("inspect")
@@ -229,10 +230,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 		return Ok(());
 	}
 
-	let cmd = make_command_line(
-		m.get_one::<OsString>("command").unwrap(),
-		m.get_many::<OsString>("args").into_iter().flatten(),
-	);
+	let cmd = if m.contains_id("shell") {
+		let mut args = Vec::with_capacity(16);
+		args.push(OsStr::new("/c"));
+		args.push(m.get_one::<OsString>("command").unwrap().as_os_str());
+		args.extend(
+			m.get_many::<OsString>("args")
+				.into_iter()
+				.flatten()
+				.map(|s| s.as_os_str()),
+		);
+		make_command_line(OsStr::new("cmd.exe"), args)
+	} else {
+		make_command_line(
+			m.get_one::<OsString>("command").unwrap(),
+			m.get_many::<OsString>("args").into_iter().flatten(),
+		)
+	};
 
 	let mut cmd = cmd
 		.into_iter()
